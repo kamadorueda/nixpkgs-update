@@ -229,6 +229,12 @@ updateAttrPath log mergeBase updateEnv@UpdateEnv {..} attrPath = do
     let skipOutpathBase = either Just (const Nothing) $ Skiplist.skipOutpathCalc packageName
 
     derivationFile <- Nix.getDerivationFile attrPath
+
+    -- Skip opted-out files (no auto update, generated, GNOME) before the
+    -- branch checks and evaluations below.
+    derivationContents <- liftIO $ T.readFile $ T.unpack derivationFile
+    Skiplist.content derivationContents
+
     unless hasUpdateScript do
       assertNotUpdatedOn updateEnv derivationFile "master"
       assertNotUpdatedOn updateEnv derivationFile "staging"
@@ -243,7 +249,6 @@ updateAttrPath log mergeBase updateEnv@UpdateEnv {..} attrPath = do
         else return $ Outpaths.dummyOutpathSetBefore attrPath
 
     -- Get the original values for diffing purposes
-    derivationContents <- liftIO $ T.readFile $ T.unpack derivationFile
     oldHash <- Nix.getHash attrPath <|> pure ""
     oldSrcUrl <- Nix.getSrcUrl attrPath <|> pure ""
     oldRev <- Nix.getAttrString "rev" attrPath <|> pure ""
@@ -252,9 +257,6 @@ updateAttrPath log mergeBase updateEnv@UpdateEnv {..} attrPath = do
     tryAssert
       "The derivation has no 'version' attribute, so do not know how to figure out the version while doing an updateScript update"
       (not hasUpdateScript || isJust oldVerMay)
-
-    -- One final filter
-    Skiplist.content derivationContents
 
     ----------------------------------------------------------------------------
     -- UPDATES
